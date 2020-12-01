@@ -16,6 +16,7 @@ type Protocol string
 const (
 	ProtocolUnknown = "<unknown>"
 	ProtocolTCP     = "tcp"
+	ProtocolTLS     = "tls"
 	ProtocolHTTP    = "http"
 	ProtocolHTTP2   = "http2"
 	ProtocolGRPC    = "grpc"
@@ -30,6 +31,8 @@ func ParseProtocol(tag string) Protocol {
 		return ProtocolHTTP2
 	case ProtocolTCP:
 		return ProtocolTCP
+	case ProtocolTLS:
+		return ProtocolTLS
 	case ProtocolGRPC:
 		return ProtocolGRPC
 	case ProtocolKafka:
@@ -57,6 +60,7 @@ var SupportedProtocols = ProtocolList{
 	ProtocolHTTP2,
 	ProtocolKafka,
 	ProtocolTCP,
+	ProtocolTLS,
 }
 
 // Service that indicates L4 pass through cluster

@@ -72,15 +72,24 @@ func (g InboundProxyGenerator) Generate(ctx xds_context.Context, proxy *model.Pr
 				filterChainBuilder.
 					Configure(envoy_listeners.Kafka(localClusterName)).
 					Configure(envoy_listeners.TcpProxy(localClusterName, envoy_common.ClusterSubset{ClusterName: localClusterName}))
+			case mesh_core.ProtocolTLS:
+				filterChainBuilder.Configure(envoy_listeners.TcpProxy(localClusterName, envoy_common.ClusterSubset{ClusterName: localClusterName}))
 			case mesh_core.ProtocolTCP:
 				fallthrough
 			default:
 				// configuration for non-HTTP cases
 				filterChainBuilder.Configure(envoy_listeners.TcpProxy(localClusterName, envoy_common.ClusterSubset{ClusterName: localClusterName}))
 			}
-			return filterChainBuilder.
-				Configure(envoy_listeners.ServerSideMTLS(ctx, proxy.Metadata)).
-				Configure(envoy_listeners.NetworkRBAC(inboundListenerName, ctx.Mesh.Resource.MTLSEnabled(), proxy.TrafficPermissions[endpoint]))
+
+			switch protocol {
+			case mesh_core.ProtocolTLS:
+			default:
+				filterChainBuilder = filterChainBuilder.
+					Configure(envoy_listeners.ServerSideMTLS(ctx, proxy.Metadata)).
+					Configure(envoy_listeners.NetworkRBAC(inboundListenerName, ctx.Mesh.Resource.MTLSEnabled(), proxy.TrafficPermissions[endpoint]))
+			}
+
+			return filterChainBuilder
 		}()
 		inboundListener, err := envoy_listeners.NewListenerBuilder().
 			Configure(envoy_listeners.InboundListener(inboundListenerName, endpoint.DataplaneIP, endpoint.DataplanePort)).

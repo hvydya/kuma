@@ -16,6 +16,7 @@ var (
 		mesh_core.ProtocolHTTP2: {mesh_core.ProtocolHTTP2, mesh_core.ProtocolTCP},
 		mesh_core.ProtocolHTTP:  {mesh_core.ProtocolHTTP, mesh_core.ProtocolTCP},
 		mesh_core.ProtocolKafka: {mesh_core.ProtocolKafka, mesh_core.ProtocolTCP},
+		mesh_core.ProtocolTLS:   {mesh_core.ProtocolTLS, mesh_core.ProtocolTCP},
 		mesh_core.ProtocolTCP:   {mesh_core.ProtocolTCP},
 	}
 )

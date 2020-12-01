@@ -104,6 +104,11 @@ func (_ OutboundProxyGenerator) generateLDS(proxy *model.Proxy, subsets []envoy_
 				Configure(envoy_listeners.Kafka(serviceName)).
 				Configure(envoy_listeners.TcpProxy(serviceName, subsets...)).
 				Configure(envoy_listeners.NetworkAccessLog(meshName, envoy_listeners.TrafficDirectionOutbound, sourceService, serviceName, proxy.Logs[serviceName], proxy))
+		case mesh_core.ProtocolTLS:
+			filterChainBuilder.
+				Configure(envoy_listeners.TcpProxy(serviceName, subsets...)).
+				Configure(envoy_listeners.FilterChainMatch()).
+				Configure(envoy_listeners.NetworkAccessLog(meshName, envoy_listeners.TrafficDirectionOutbound, sourceService, serviceName, proxy.Logs[serviceName], proxy))
 		case mesh_core.ProtocolTCP:
 			fallthrough
 		default:
@@ -114,11 +119,19 @@ func (_ OutboundProxyGenerator) generateLDS(proxy *model.Proxy, subsets []envoy_
 		}
 		return filterChainBuilder
 	}()
-	listener, err := envoy_listeners.NewListenerBuilder().
+
+	listenerBuilder := envoy_listeners.NewListenerBuilder().
 		Configure(envoy_listeners.OutboundListener(outboundListenerName, oface.DataplaneIP, oface.DataplanePort)).
 		Configure(envoy_listeners.FilterChain(filterChainBuilder)).
-		Configure(envoy_listeners.TransparentProxying(proxy.Dataplane.Spec.Networking.GetTransparentProxying())).
-		Build()
+		Configure(envoy_listeners.TransparentProxying(proxy.Dataplane.Spec.Networking.GetTransparentProxying()))
+
+	switch protocol {
+	case mesh_core.ProtocolTLS:
+		listenerBuilder = listenerBuilder.Configure(envoy_listeners.TLSInspector()).
+			Configure(envoy_listeners.FilterChain(envoy_listeners.NewFilterChainBuilder()))
+	}
+
+	listener, err := listenerBuilder.Build()
 	if err != nil {
 		return nil, errors.Wrapf(err, "could not generate listener %s for service %s", outboundListenerName, serviceName)
 	}
@@ -129,6 +142,7 @@ func (o OutboundProxyGenerator) generateCDS(ctx xds_context.Context, proxy *mode
 	resources := model.NewResourceSet()
 	for _, clusterName := range clusters.ClusterNames() {
 		serviceName := clusters.Tags(clusterName)[0][kuma_mesh.ServiceTag]
+		protocol := o.inferProtocol(proxy, clusters.Get(clusterName).Subsets())
 		tags := clusters.Tags(clusterName)
 		healthCheck := proxy.HealthChecks[serviceName]
 		circuitBreaker := proxy.CircuitBreakers[serviceName]
@@ -141,7 +155,6 @@ func (o OutboundProxyGenerator) generateCDS(ctx xds_context.Context, proxy *mode
 			edsClusterBuilder = edsClusterBuilder.
 				Configure(envoy_clusters.StrictDNSCluster(clusterName, proxy.OutboundTargets[serviceName])).
 				Configure(envoy_clusters.ClientSideTLS(proxy.OutboundTargets[serviceName]))
-			protocol := o.inferProtocol(proxy, clusters.Get(clusterName).Subsets())
 			switch protocol {
 			case mesh_core.ProtocolHTTP2, mesh_core.ProtocolGRPC:
 				edsClusterBuilder = edsClusterBuilder.Configure(envoy_clusters.Http2())
@@ -150,8 +163,13 @@ func (o OutboundProxyGenerator) generateCDS(ctx xds_context.Context, proxy *mode
 		} else {
 			edsClusterBuilder = edsClusterBuilder.
 				Configure(envoy_clusters.EdsCluster(clusterName)).
-				Configure(envoy_clusters.ClientSideMTLS(ctx, proxy.Metadata, serviceName, tags)).
 				Configure(envoy_clusters.Http2())
+			switch protocol {
+			case mesh_core.ProtocolTLS:
+			default:
+				edsClusterBuilder = edsClusterBuilder.
+					Configure(envoy_clusters.ClientSideMTLS(ctx, proxy.Metadata, serviceName, tags))
+			}
 		}
 		edsCluster, err := edsClusterBuilder.Build()
 		if err != nil {

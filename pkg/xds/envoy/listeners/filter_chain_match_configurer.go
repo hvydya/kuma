@@ -16,7 +16,8 @@ type FilterChainMatchConfigurer struct {
 
 func (f *FilterChainMatchConfigurer) Configure(filterChain *envoy_listener.FilterChain) error {
 	filterChain.FilterChainMatch = &envoy_listener.FilterChainMatch{
-		ServerNames: f.serverNames,
+		ServerNames:       f.serverNames,
+		TransportProtocol: "tls",
 	}
 	return nil
 }
